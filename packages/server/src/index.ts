@@ -65,7 +65,7 @@ function sendResponse(id: number, result: Record<string, unknown>) {
 
             const input = json.params.arguments;
             const result = await tool.fn(input);
-            sendResponse(json.id, { result });
+            sendResponse(json.id, result);
             break;
           }
           case "resources/list": {
@@ -98,8 +98,6 @@ function sendResponse(id: number, result: Record<string, unknown>) {
             sendResponse(json.id, {});
             break;
           }
-          default:
-            console.log(`Unknown method: ${json.method}`);
         }
       }
     } catch (error) {
