@@ -14,3 +14,8 @@ export interface Resource {
 export interface Content {
   text: string;
 }
+
+export interface Message {
+  role: string;
+  content: string;
+}

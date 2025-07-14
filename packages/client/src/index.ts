@@ -2,8 +2,9 @@ import * as readline from "node:readline";
 import { spawn } from "node:child_process";
 import { intro, isCancel, select, text } from "@clack/prompts";
 import chalk from "chalk";
+import "dotenv/config";
 import { Tool, Resource, Content } from "./types.js";
-import { dumpContent } from "./utils.js";
+import { callAiWithTools, dumpContent } from "./utils.js";
 
 (async () => {
   const serverProcess = spawn("node", ["../server/dist/index.js"], {
@@ -73,7 +74,12 @@ import { dumpContent } from "./utils.js";
   intro(`Connected to ${serverInfo.name} v${serverInfo.version}`);
 
   while (true) {
-    const options = [];
+    const options = [
+      {
+        value: "ai",
+        label: "Asking a question with AI",
+      },
+    ];
 
     if (resources.length > 0) {
       options.unshift({ value: "resources", label: "Get a resource" });
@@ -165,6 +171,82 @@ import { dumpContent } from "./utils.js";
       });
 
       dumpContent(contents);
+    }
+
+    if (action === "ai") {
+      const prompt = await text({
+        message: "What would you like to ask?",
+        initialValue: "What kind of resources do you have?",
+      });
+
+      if (isCancel(prompt)) {
+        process.exit(0);
+      }
+
+      const messages: Array<{
+        role: string;
+        content: any;
+        type?: string;
+        text?: string;
+        name?: string;
+        input?: string;
+        id?: string;
+      }> = [{ role: "user", content: prompt }];
+      const promptResult = await callAiWithTools(messages, tools);
+
+      messages.push({
+        role: "assistant",
+        content: promptResult,
+      });
+
+      console.log(promptResult);
+
+      if (!Array.isArray(promptResult)) {
+        process.exit(0);
+      }
+
+      for (const toll of promptResult) {
+        if (toll.type === "string") {
+          console.log(toll.text);
+        }
+      }
+
+      const lastMessage = promptResult[promptResult.length - 1] || {};
+
+      if (lastMessage.type === "tool_use") {
+        console.log(
+          chalk.blueBright(
+            `Using tool: ${lastMessage.name} - ${JSON.stringify(lastMessage.input)}`,
+          ),
+        );
+
+        const { content }: { content: Array<Content> } = await send(
+          "tools/call",
+          {
+            name: lastMessage.name,
+            arguments: lastMessage.input,
+          },
+        );
+
+        messages.push({
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: lastMessage.id,
+              content: content[0].text,
+            },
+          ],
+        });
+
+        const followUpResult = await callAiWithTools(messages, tools);
+
+        for (const tool of followUpResult) {
+          if (tool.type === "string") {
+            console.log(tool.text);
+          }
+        }
+      }
     }
   }
 })();
